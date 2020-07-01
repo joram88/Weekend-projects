@@ -1,0 +1,175 @@
+#Building a Word Predictor Model
+#https://medium.com/@dennyc/a-simple-numerical-example-for-kneser-ney-smoothing-nlp-4600addf38b8
+#https://cbail.github.io/SICSS_Basic_Text_Analysis.html
+
+#Javier's recs: Remove combos with n = 1, don't remove stopwords
+#Put only bigrams and trigrams onto shiny. Keep source in an Rdata file
+
+library(stringr)
+library(tidytext)
+library(dplyr)
+library(widyr)
+library(tidyr)
+
+#Part 1 - Exploratory Analysis of the three files
+
+setwd("~/R/Capstone")
+
+set.seed(421)
+
+news <- file("en_US.news.txt", "r")
+news_lines <- readLines(news, encoding = "UTF-8", warn = FALSE)
+news_lines <- tibble(text = (sample(news_lines, 50000, replace = FALSE)))
+
+
+#data(stop_words)
+news_lines <- news_lines %>%
+        unnest_tokens(word, text)
+        #anti_join(stop_words)
+
+blog <- file("en_US.blogs.txt", "r")
+blog_lines <- readLines(blog, encoding = "UTF-8", warn = FALSE)
+blog_lines <- tibble(text = (sample(blog_lines, 200000, replace = FALSE)))
+
+#data(stop_words)
+blog_lines <- blog_lines %>% 
+        unnest_tokens(word, text) 
+        #anti_join(stop_words)
+
+
+twitter <- file("en_US.twitter.txt", "r")
+twit_lines <- readLines(twitter, encoding = "UTF-8", warn = FALSE)
+twit_lines <- tibble(text = sample(twit_lines, 400000, replace = FALSE))
+
+
+#data(stop_words)
+twit_lines <- twit_lines %>% 
+        unnest_tokens(word, text)
+        #anti_join(stop_words)
+
+source <- rbind(news_lines, blog_lines, twit_lines)
+
+tidy_source <- source[-grep("\\b\\d+\\b", source$word),]
+
+words <- tidy_source %>% 
+        unnest_tokens(word, word) %>% 
+        count(word, sort = TRUE)
+
+total_words <- words %>% 
+        summarize(total = sum(n))
+
+words <- cbind(words, total_words)
+
+# Part 2 - Bigram and Trigram layout
+
+d <- 0.75
+
+unigrams <- words %>% 
+        mutate(rank = row_number(), freq = n/total)
+
+bigrams <- tidy_source %>% 
+        unnest_tokens(bigram, word, token = "ngrams", n = 2) %>% 
+        separate(bigram, c("word1", "word2"), sep = " ") %>% 
+        count(word1, word2, sort = TRUE)
+
+bi_rows <- nrow(bigrams)
+
+trigrams <- tidy_source %>% 
+        unnest_tokens(trigram, word, token = "ngrams", n = 3) %>% 
+        separate(trigram, c("word1", "word2", "word3"), sep = " ") %>% 
+        count(word1, word2, word3, sort = TRUE, name = "combo")
+
+tri_rows <- nrow(trigrams)
+
+tw1 <- tidy_source %>% 
+        unnest_tokens(trigram, word, token = "ngrams", n = 3) %>% 
+        separate(trigram, c("word1", "word2", "word3"), sep = " ") %>% 
+        count(word1, sort = TRUE, name = "n_tw1") %>% 
+        mutate(ptw1 = n_tw1 / tri_rows)
+
+tw2 <- tidy_source %>% 
+        unnest_tokens(trigram, word, token = "ngrams", n = 3) %>% 
+        separate(trigram, c("word1", "word2", "word3"), sep = " ") %>% 
+        count(word2, sort = TRUE, name = "n_tw2") %>% 
+        mutate(ptw2 = n_tw2 / tri_rows)
+
+tw3 <- tidy_source %>% 
+        unnest_tokens(trigram, word, token = "ngrams", n = 3) %>% 
+        separate(trigram, c("word1", "word2", "word3"), sep = " ") %>% 
+        count(word3, sort = TRUE, name = "n_tw3") %>% 
+        mutate(ptw3 = n_tw3 / tri_rows)
+
+trigrams <- merge(trigrams, tw3, by = "word3")
+trigrams <- merge(trigrams, tw2, by = "word2")
+trigrams <- merge(trigrams, tw1, by = "word1")
+
+
+
+#Part 3 - Preparing for Prediction functions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Part 4 - The actual functions
+
+wordPred <- function(string){
+        
+        if(str_count(string, '\\s+')+1 == 4){
+                
+               predict <- pentagrams %>% 
+                        filter(word4 == word(string, -1)) %>% 
+                        arrange(desc(freq)) %>% 
+                        slice(1:3)
+        return(predict$word5)
+        
+        }
+        
+        else if (str_count(string, '\\s+')+1 == 3){
+                
+                predict <- tetragrams %>% 
+                        filter(word3 == word(string, -1)) %>% 
+                        arrange(desc(freq)) %>% 
+                        slice(1:3)
+                print(predict$word4)
+                
+        }
+        
+        else if(str_count(string, '\\s+')+1 == 2){
+                
+                predict <- trigrams %>% 
+                        filter(word2 == word(string, -1)) %>% 
+                        arrange(desc(freq)) %>% 
+                        slice(1:3)
+                print(predict$word3)
+                
+        }
+        
+        else if(str_count(string, '\\s+')+1 == 1){
+                
+                predict <- bigrams %>% 
+                        filter(word1 == string) %>% 
+                        arrange(desc(freq)) %>% 
+                        slice(1:3)
+                print(predict$word2)
+               
+        }
+        
+        else {
+                print(sample(unigrams$word, size = 3))    
+        }
+}
+
